@@ -8,7 +8,7 @@ The project currently targets **Bitcoin Cash Chipnet** for development and testi
 
 ## Features
 
-### 1. SplitRouter — Multi-recipient payments
+### SplitRouter — Multi-recipient payments
 
 SplitRouter allows users to divide a BCH payment between two recipients through a CashScript smart contract.
 
@@ -23,36 +23,6 @@ The contract enforces:
 
 These rules prevent the transaction from changing the intended recipient addresses or payment amounts.
 
-### 2. GroupVault — Group contributions
-
-GroupVault allows multiple participants to contribute BCH towards a shared funding target.
-
-Each group includes:
-
-- A group name and optional description.
-- A target contribution amount.
-- A creator/beneficiary BCH address.
-- A derived GroupVault contract address.
-- Individual contribution records.
-- Transaction verification against the contract address.
-
-The GroupVault contract supports settlement using up to 10 funding UTXOs. It enforces the required funding amount and beneficiary output.
-
-### 3. Invitation export and import
-
-SplitPay includes a signed invitation system for sharing split and group payment information.
-
-The invitation service supports:
-
-- Exporting SPLIT and GROUP invitations.
-- Encoding invitation data into a portable Base64URL string.
-- Signing invitation payloads with HMAC-SHA256.
-- Configurable expiration between 1 and 168 hours.
-- Importing and validating invitation signatures.
-- Checking invitation expiration.
-- Checking that the invitation belongs to the configured BCH network.
-
-Invitations are stateless: they are signed and encoded without being stored in the database.
 
 **Important:** Invitations are signed, not encrypted. Do not include private keys, passwords, or other secrets in invitation data. Export/import provides portable data sharing; it does not automatically synchronize wallets or execute payments.
 
