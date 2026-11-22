@@ -100,6 +100,30 @@ export default function HomePage() {
     };
   }
 
+  function displayValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '0';
+  }
+
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+
+  if (
+    typeof value === 'object' &&
+    'toString' in value &&
+    typeof value.toString === 'function'
+  ) {
+    return value.toString();
+  }
+
+  return '—';
+}
+
   async function handlePreview() {
     setBusy(true);
     setError('');
@@ -375,28 +399,28 @@ export default function HomePage() {
 
             {preview.allocations.map((item) => (
               <p key={item.address}>
-                {item.name}: <strong>{item.amount} BCH</strong>
+                <strong>{displayValue(item.amount)} BCH</strong>
               </p>
             ))}
 
             <p>
-              Total: {preview.totalAmount} BCH
+              <p>Total: {displayValue(preview.totalAmount)} BCH</p>
             </p>
 
             <p>
-              Miner fee: {preview.minerFeeSatoshis} satoshis
+              Miner fee: {displayValue(preview.minerFeeSatoshis)} satoshis
             </p>
 
             <p>
-              Required funding: {preview.requiredFundingSatoshis} satoshis
+              Required funding: {displayValue(preview.requiredFundingSatoshis)} satoshis
             </p>
 
             <p>
-              Network: {preview.network}
+              Network: {displayValue(preview.network)}
             </p>
 
             <p>
-              Status: {preview.status}
+              Status: {displayValue(preview.status)}
             </p>
 
             <div className="field">
@@ -516,13 +540,13 @@ export default function HomePage() {
                 <h3>{group.name}</h3>
 
                 <p>
-                  Target: {group.targetAmount} BCH
+                  <p>Target: {displayValue(group.targetAmount)} BCH</p>
                 </p>
 
-                <p>Status: {group.status}</p>
+                <p>Status: {displayValue(group.status)}</p>
 
                 <p>
-                  Contributions: {group.contributions?.length ?? 0}
+                  Contributions: {displayValue(group.contributions?.length ?? 0)}
                 </p>
 
                 {group.vaultAddress && (
