@@ -500,7 +500,7 @@ export default function HomePage() {
         )}
       </section>
 
-      <section className="panel" style={{ marginTop: 18 }}>
+      {/* <section className="panel" style={{ marginTop: 18 }}>
         <h2>GroupVault</h2>
         <p>
           Create a shared funding goal and collect BCH
@@ -691,7 +691,7 @@ export default function HomePage() {
             })}
           </div>
         )}
-      </section>
+      </section> */}
 
       <p className="note" style={{ marginTop: 24 }}>
         SplitPay currently targets Bitcoin Cash Chipnet.
