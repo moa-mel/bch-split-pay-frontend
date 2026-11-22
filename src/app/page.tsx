@@ -11,6 +11,18 @@ import type {
   SplitExecution,
 } from '@/lib/api';
 
+type ContributionForm = {
+  contributor: string;
+  amount: string;
+  transactionId: string;
+};
+
+const emptyContributionForm: ContributionForm = {
+  contributor: '',
+  amount: '',
+  transactionId: '',
+};
+
 export default function HomePage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [busy, setBusy] = useState(false);
@@ -25,22 +37,39 @@ export default function HomePage() {
   const [percentageOne, setPercentageOne] = useState('50');
   const [percentageTwo, setPercentageTwo] = useState('50');
 
-  const [preview, setPreview] =
-    useState<SplitPreview | null>(null);
-
-  const [execution, setExecution] =
-    useState<SplitExecution | null>(null);
+  const [preview, setPreview] = useState<SplitPreview | null>(null);
+  const [execution, setExecution] = useState<SplitExecution | null>(null);
 
   const [groupName, setGroupName] = useState('');
   const [description, setDescription] = useState('');
   const [targetAmount, setTargetAmount] = useState('1');
-  const [beneficiaryAddress, setBeneficiaryAddress] =
-    useState('');
+  const [beneficiaryAddress, setBeneficiaryAddress] = useState('');
 
-  const [contributor, setContributor] = useState('');
-  const [contributionAmount, setContributionAmount] =
-    useState('');
-  const [transactionId, setTransactionId] = useState('');
+  // Each GroupVault has independent contribution form state.
+  const [contributionForms, setContributionForms] = useState<
+    Record<string, ContributionForm>
+  >({});
+
+  // Track verification separately for each GroupVault.
+  const [verifyingGroupIds, setVerifyingGroupIds] = useState<string[]>([]);
+
+  function getContributionForm(groupId: string): ContributionForm {
+    return contributionForms[groupId] ?? emptyContributionForm;
+  }
+
+  function updateContributionForm(
+    groupId: string,
+    field: keyof ContributionForm,
+    value: string,
+  ) {
+    setContributionForms((previous) => ({
+      ...previous,
+      [groupId]: {
+        ...(previous[groupId] ?? emptyContributionForm),
+        [field]: value,
+      },
+    }));
+  }
 
   async function loadGroups() {
     try {
@@ -48,9 +77,7 @@ export default function HomePage() {
       setGroups(result);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to load groups.',
+        err instanceof Error ? err.message : 'Unable to load groups.',
       );
     }
   }
@@ -79,7 +106,7 @@ export default function HomePage() {
       throw new Error('Recipient percentages must total 100%.');
     }
 
-    if (Number(totalAmount) <= 0) {
+    if (!Number.isFinite(Number(totalAmount)) || Number(totalAmount) <= 0) {
       throw new Error('Enter a valid BCH amount.');
     }
 
@@ -101,28 +128,28 @@ export default function HomePage() {
   }
 
   function displayValue(value: unknown): string {
-  if (value === null || value === undefined) {
-    return '0';
-  }
+    if (value === null || value === undefined) {
+      return '0';
+    }
 
-  if (
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'bigint'
-  ) {
-    return String(value);
-  }
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'bigint'
+    ) {
+      return String(value);
+    }
 
-  if (
-    typeof value === 'object' &&
-    'toString' in value &&
-    typeof value.toString === 'function'
-  ) {
-    return value.toString();
-  }
+    if (
+      typeof value === 'object' &&
+      'toString' in value &&
+      typeof value.toString === 'function'
+    ) {
+      return value.toString();
+    }
 
-  return '—';
-}
+    return '—';
+  }
 
   async function handlePreview() {
     setBusy(true);
@@ -131,16 +158,11 @@ export default function HomePage() {
     setExecution(null);
 
     try {
-      const result = await api.previewSplit(
-        buildSplitRequest(),
-      );
-
+      const result = await api.previewSplit(buildSplitRequest());
       setPreview(result);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to preview split.',
+        err instanceof Error ? err.message : 'Unable to preview split.',
       );
     } finally {
       setBusy(false);
@@ -155,17 +177,12 @@ export default function HomePage() {
     setSuccess('');
 
     try {
-      const result = await api.executeSplit(
-        buildSplitRequest(),
-      );
-
+      const result = await api.executeSplit(buildSplitRequest());
       setExecution(result);
       setSuccess('Split transaction submitted successfully.');
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Split execution failed.',
+        err instanceof Error ? err.message : 'Split execution failed.',
       );
     } finally {
       setBusy(false);
@@ -195,9 +212,7 @@ export default function HomePage() {
       setSuccess('GroupVault created successfully.');
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to create group.',
+        err instanceof Error ? err.message : 'Unable to create group.',
       );
     } finally {
       setBusy(false);
@@ -205,20 +220,46 @@ export default function HomePage() {
   }
 
   async function handleContribution(groupId: string) {
-    setBusy(true);
+    const form = getContributionForm(groupId);
+
+    if (!form.contributor.trim()) {
+      setError('Enter the contributor name for this group.');
+      return;
+    }
+
+    if (!form.transactionId.trim()) {
+      setError('Enter the transaction ID for this group.');
+      return;
+    }
+
+    if (
+      !Number.isFinite(Number(form.amount)) ||
+      Number(form.amount) <= 0
+    ) {
+      setError('Enter a valid contribution amount.');
+      return;
+    }
+
+    setVerifyingGroupIds((previous) =>
+      previous.includes(groupId) ? previous : [...previous, groupId],
+    );
+
     setError('');
     setSuccess('');
 
     try {
+      // Submit only the values belonging to this GroupVault.
       await api.addContribution(groupId, {
-        contributor,
-        amount: Number(contributionAmount),
-        transactionId: transactionId.trim(),
+        contributor: form.contributor.trim(),
+        amount: Number(form.amount),
+        transactionId: form.transactionId.trim(),
       });
 
-      setContributor('');
-      setContributionAmount('');
-      setTransactionId('');
+      // Clear only the successfully submitted group's form.
+      setContributionForms((previous) => ({
+        ...previous,
+        [groupId]: { ...emptyContributionForm },
+      }));
 
       await loadGroups();
 
@@ -230,13 +271,19 @@ export default function HomePage() {
           : 'Unable to record contribution.',
       );
     } finally {
-      setBusy(false);
+      setVerifyingGroupIds((previous) =>
+        previous.filter((id) => id !== groupId),
+      );
     }
   }
 
   async function copyAddress(address: string) {
-    await navigator.clipboard.writeText(address);
-    setSuccess('Address copied.');
+    try {
+      await navigator.clipboard.writeText(address);
+      setSuccess('Address copied.');
+    } catch {
+      setError('Unable to copy address.');
+    }
   }
 
   return (
@@ -403,9 +450,7 @@ export default function HomePage() {
               </p>
             ))}
 
-            <p>
-              <p>Total: {displayValue(preview.totalAmount)} BCH</p>
-            </p>
+            <p>Total: {displayValue(preview.totalAmount)} BCH</p>
 
             <p>
               Miner fee: {displayValue(preview.minerFeeSatoshis)} satoshis
@@ -415,20 +460,14 @@ export default function HomePage() {
               Required funding: {displayValue(preview.requiredFundingSatoshis)} satoshis
             </p>
 
-            <p>
-              Network: {displayValue(preview.network)}
-            </p>
+            <p>Network: {displayValue(preview.network)}</p>
 
-            <p>
-              Status: {displayValue(preview.status)}
-            </p>
+            <p>Status: {displayValue(preview.status)}</p>
 
             <div className="field">
               <label>SplitRouter contract address</label>
-              <input
-                readOnly
-                value={preview.contractAddress}
-              />
+              <input readOnly value={preview.contractAddress} />
+
               <button
                 className="secondary"
                 onClick={() => copyAddress(preview.contractAddress)}
@@ -511,7 +550,9 @@ export default function HomePage() {
           disabled={
             busy ||
             !groupName.trim() ||
-            !beneficiaryAddress.trim()
+            !beneficiaryAddress.trim() ||
+            !Number.isFinite(Number(targetAmount)) ||
+            Number(targetAmount) <= 0
           }
           onClick={handleCreateGroup}
         >
@@ -535,91 +576,119 @@ export default function HomePage() {
           <p>No groups created yet.</p>
         ) : (
           <div className="group-list">
-            {groups.map((group) => (
-              <div className="group-item" key={group.id}>
-                <h3>{group.name}</h3>
+            {groups.map((group) => {
+              const form = getContributionForm(group.id);
+              const isVerifying = verifyingGroupIds.includes(group.id);
 
-                <p>
-                  <p>Target: {displayValue(group.targetAmount)} BCH</p>
-                </p>
+              return (
+                <div className="group-item" key={group.id}>
+                  <h3>{group.name}</h3>
 
-                <p>Status: {displayValue(group.status)}</p>
-
-                <p>
-                  Contributions: {displayValue(group.contributions?.length ?? 0)}
-                </p>
-
-                {group.vaultAddress && (
-                  <div className="field">
-                    <label>GroupVault address</label>
-                    <input
-                      readOnly
-                      value={group.vaultAddress}
-                    />
-                    <button
-                      className="secondary"
-                      onClick={() => copyAddress(group.vaultAddress!)}
-                    >
-                      Copy vault address
-                    </button>
-                  </div>
-                )}
-
-                <h3>Submit a contribution</h3>
-
-                <div className="field">
-                  <label>Contributor name</label>
-                  <input
-                    value={contributor}
-                    onChange={(e) => setContributor(e.target.value)}
-                    placeholder="Your name"
-                  />
-                </div>
-
-                <div className="field">
-                  <label>Contribution amount (BCH)</label>
-                  <input
-                    type="number"
-                    min="0.00000001"
-                    step="0.00000001"
-                    value={contributionAmount}
-                    onChange={(e) => setContributionAmount(e.target.value)}
-                    placeholder="0.1"
-                  />
-                </div>
-
-                <div className="field">
-                  <label>BCH transaction ID</label>
-                  <input
-                    value={transactionId}
-                    onChange={(e) => setTransactionId(e.target.value)}
-                    placeholder="64-character transaction ID"
-                  />
-                </div>
-
-                <button
-                  className="primary"
-                  disabled={
-                    busy ||
-                    !contributor.trim() ||
-                    !transactionId.trim() ||
-                    Number(contributionAmount) <= 0
-                  }
-                  onClick={() => handleContribution(group.id)}
-                >
-                  Verify contribution
-                </button>
-
-                <h3>Contribution history</h3>
-
-                {(group.contributions ?? []).map((item) => (
-                  <p key={item.id}>
-                    {item.contributor} · {item.amount} BCH ·{' '}
-                    {item.confirmed ? 'Confirmed' : 'Pending'}
+                  <p>
+                    Target: {displayValue(group.targetAmount)} BCH
                   </p>
-                ))}
-              </div>
-            ))}
+
+                  <p>Status: {displayValue(group.status)}</p>
+
+                  <p>
+                    Contributions:{' '}
+                    {displayValue(group.contributions?.length ?? 0)}
+                  </p>
+
+                  {group.vaultAddress && (
+                    <div className="field">
+                      <label>GroupVault address</label>
+                      <input
+                        readOnly
+                        value={group.vaultAddress}
+                      />
+
+                      <button
+                        className="secondary"
+                        onClick={() => copyAddress(group.vaultAddress!)}
+                      >
+                        Copy vault address
+                      </button>
+                    </div>
+                  )}
+
+                  <h3>Submit a contribution to {group.name}</h3>
+
+                  <div className="field">
+                    <label>Contributor name</label>
+                    <input
+                      value={form.contributor}
+                      onChange={(e) =>
+                        updateContributionForm(
+                          group.id,
+                          'contributor',
+                          e.target.value,
+                        )
+                      }
+                      placeholder="Your name"
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>Contribution amount (BCH)</label>
+                    <input
+                      type="number"
+                      min="0.00000001"
+                      step="0.00000001"
+                      value={form.amount}
+                      onChange={(e) =>
+                        updateContributionForm(
+                          group.id,
+                          'amount',
+                          e.target.value,
+                        )
+                      }
+                      placeholder="0.1"
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>BCH transaction ID</label>
+                    <input
+                      value={form.transactionId}
+                      onChange={(e) =>
+                        updateContributionForm(
+                          group.id,
+                          'transactionId',
+                          e.target.value,
+                        )
+                      }
+                      placeholder="64-character transaction ID"
+                    />
+                  </div>
+
+                  <button
+                    className="primary"
+                    disabled={
+                      isVerifying ||
+                      !form.contributor.trim() ||
+                      !form.transactionId.trim() ||
+                      !Number.isFinite(Number(form.amount)) ||
+                      Number(form.amount) <= 0
+                    }
+                    onClick={() => handleContribution(group.id)}
+                  >
+                    {isVerifying
+                      ? 'Verifying this group...'
+                      : 'Verify contribution'}
+                  </button>
+
+                  <h3>Contribution history</h3>
+
+                  {(group.contributions ?? []).map((item) => (
+                    <p key={item.id}>
+                      {item.contributor} · {displayValue(item.amount)} BCH ·{' '}
+                      {item.confirmed ? 'Confirmed' : 'Pending'}
+                    </p>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
